@@ -73,6 +73,11 @@ public class ConsoleVec3
             Convert.ToSingle( values[2] ) );
     }
 
+    public ConsoleVec3( float x, float y, float z )
+    {
+        vector = new Vector3( x, y, z );
+    }
+
     public static implicit operator Vector3( ConsoleVec3 vec3 )
     {
         return vec3.vector;
@@ -308,6 +313,7 @@ public class MyTestClass
     [ConsoleVar] private static bool testBool = false;
     [ConsoleVar] private static float testFloat = -1.0f;
     [ConsoleVar] private static TestEnum testEnum = TestEnum.EnumA;
+    [ConsoleVar] private static ConsoleVec3 testVec = new( 0, 0, 0 );
 }
 
 #endregion
