@@ -301,9 +301,8 @@ public static class Console
 
 #endregion
 
-#if DEFAULT_UI_IN_USE
 
-#region DEFAULT_UI
+#region STRING_EXTENSIONS
 
 static class StringExtensions
 {
@@ -379,6 +378,12 @@ static class StringExtensions
             .ToArray();
     }
 }
+
+#endregion
+
+#if DEFAULT_UI_IN_USE
+
+#region DEFAULT_UI
 
 public class DefaultConsoleUI : MonoBehaviour
 {
