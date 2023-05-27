@@ -122,7 +122,6 @@ public static class Console
             names.Add( var.Name );
         }
 
-        // TODO: Implement functions... How do I want to handle parameters? 
         var funcs = mainAssembly.GetTypes()
             .SelectMany( t =>
                 t.GetMethods( BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static )
@@ -161,16 +160,16 @@ public static class Console
             {
                 string value = command.Substring( pos + 1 );
 
-                // try
+                try
                 {
                     var.SetValueOptimized( null, conv.ConvertFromString( value ) );
                     WriteResult( conv.ConvertToString( var.GetValue( null ) ) );
                 }
-                // catch( Exception e )
-                // {
-                // string eMsg = e.ToString();
-                // WriteResult( $"<color=red>Error: '{eMsg.Substring( 0, eMsg.IndexOf( '\n' ) )}'</color>" );
-                // }
+                catch( Exception e )
+                {
+                    string eMsg = e.ToString();
+                    WriteResult( $"<color=red>Error: '{eMsg.Substring( 0, eMsg.IndexOf( '\n' ) )}'</color>" );
+                }
             }
         }
         else if( consoleFuncs.TryGetValue( target, out var func ) )
