@@ -1,4 +1,6 @@
 #define DEFAULT_UI_IN_USE
+// #define TESTS_IN_USE
+#define LOGGING_IN_USE
 
 using System;
 using System.Collections.Generic;
@@ -8,6 +10,9 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using Unity.VisualScripting;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 using UnityEngine;
 
 #region ATTRIBUTES
@@ -83,7 +88,7 @@ public class ConsoleVec3
         return vec3.vector;
     }
 
-    public override string ToString( )
+    public override string ToString()
     {
         return vector.ToString();
     }
@@ -94,7 +99,7 @@ public class ConsoleVec3
 
 #region CONSOLE
 
-public static class Console
+public static partial class Console
 {
     private static Dictionary<string, FieldInfo> consoleVars = new();
     private static Dictionary<string, MethodInfo> consoleFuncs = new();
@@ -106,9 +111,17 @@ public static class Console
     public static TextWrittenDelegate OnTextWritten;
     public static TextWrittenDelegate OnResultWritten;
 
-    [RuntimeInitializeOnLoadMethod]
-    public static void Init( )
+    public static bool IsInitialised = false;
+
+    [RuntimeInitializeOnLoadMethod( RuntimeInitializeLoadType.BeforeSceneLoad )]
+    private static void Init()
     {
+        if( !Debug.isDebugBuild && !Application.isEditor )
+        {
+            return;
+        }
+
+        IsInitialised = true;
         Assembly mainAssembly = Assembly.GetAssembly( typeof( Console ) );
 
         var vars = mainAssembly.GetTypes()
@@ -137,10 +150,19 @@ public static class Console
         GameObject uiObject = new GameObject( "DebugConsoleUI" );
         uiObject.AddComponent<DefaultConsoleUI>();
 #endif
+
+#if LOGGING_IN_USE
+        InitLogging();
+#endif
     }
 
     public static void ExecuteCommand( string command )
     {
+        if( !IsInitialised )
+        {
+            return;
+        }
+
         int pos = command.IndexOf( ' ' );
         if( pos < 0 )
         {
@@ -243,11 +265,13 @@ public static class Console
 
     public static void Write( string text )
     {
+        if( !IsInitialised ) return;
         OnTextWritten?.Invoke( text );
     }
 
     public static void WriteResult( string text )
     {
+        if( !IsInitialised ) return;
         OnResultWritten?.Invoke( text );
     }
 
@@ -258,6 +282,7 @@ public static class Console
 
     public static string GetDescription( string input )
     {
+        if( !IsInitialised ) return string.Empty;
         //Cut out anything but the command / var itself (for now at least).
         var index = input.IndexOf( ' ' );
         if( index > 0 )
@@ -404,7 +429,7 @@ public class DefaultConsoleUI : MonoBehaviour
     [ConsoleVar] private static int consoleOutputHistoryCount = 5;
     [ConsoleVar] private static float consoleDeleteInterval = 0.1f;
 
-    private void Awake( )
+    private void Awake()
     {
         Console.OnTextWritten += OnTextWritten;
         Console.OnResultWritten += OnResultWritten;
@@ -425,7 +450,7 @@ public class DefaultConsoleUI : MonoBehaviour
         result += text;
     }
 
-    public void Update( )
+    public void Update()
     {
         if( Input.GetKeyDown( KeyCode.BackQuote ) )
         {
@@ -509,7 +534,7 @@ public class DefaultConsoleUI : MonoBehaviour
         }
     }
 
-    public void OnGUI( )
+    public void OnGUI()
     {
         if( !enabled )
         {
@@ -547,6 +572,7 @@ public class DefaultConsoleUI : MonoBehaviour
 
 #region Tests
 
+#if TESTS_IN_USE
 public class MyTestClass
 {
     public enum TestEnum
@@ -561,47 +587,184 @@ public class MyTestClass
     [ConsoleVar] private static bool testBool = false;
     [ConsoleVar] private static float testFloat = -1.0f;
     [ConsoleVar] private static TestEnum testEnum = TestEnum.EnumA;
-    [ConsoleVar] private static ConsoleVec3 testVec = new( 0, 0, 0 );
+    [ConsoleVar] private static ConsoleVec3 testVec = new(0, 0, 0);
 
     [ConsoleFunc]
-    private static int AddInt( int a, int b )
+    private static int AddInt(int a, int b)
     {
         return a + b;
     }
 
     [ConsoleFunc]
-    private static float AddFloat( float a, float b )
+    private static float AddFloat(float a, float b)
     {
         return a + b;
     }
 
     [ConsoleFunc]
-    private static void LogString( string text )
+    private static void LogString(string text)
     {
-        Debug.Log( text );
+        Debug.Log(text);
     }
 
     [ConsoleFunc]
-    private static Vector3 ScaleVec( ConsoleVec3 vec, float scale )
+    private static Vector3 ScaleVec(ConsoleVec3 vec, float scale)
     {
-        return ( Vector3 ) vec * scale;
+        return (Vector3)vec * scale;
     }
 
     [ConsoleFunc]
-    private static void RepeatString( string str, int numRepeats )
+    private static void RepeatString(string str, int numRepeats)
     {
-        for( int i = 0; i < numRepeats; i++ )
+        for (int i = 0; i < numRepeats; i++)
         {
-            Console.WriteResult( str + ", " );
+            Console.WriteResult(str + ", ");
         }
     }
 
     [ConsoleFunc]
-    private static void OptionalArgTest( string req, int numRepeats = 2 )
+    private static void OptionalArgTest(string req, int numRepeats = 2)
     {
-        RepeatString( req, numRepeats );
+        RepeatString(req, numRepeats);
     }
 }
+#endif
+
+#endregion
+
+#region Logging System
+
+#if LOGGING_IN_USE
+
+public partial class Console
+{
+    private static readonly string CONSOLE_LOG_LEVELS_ASSET = "ConsoleLogLevels";
+
+    public enum LogLevel
+    {
+        Critical = 0,
+        Error,
+        Warning,
+        Info,
+        Debug
+    }
+
+    private static Dictionary<string, LogLevel> loggingLevels;
+    private static ConsoleLogLevels logLevelsAsset;
+
+    [System.Serializable]
+    public class LogEntry
+    {
+        public string typeName;
+        public LogLevel level;
+
+        public LogEntry( string typeName, LogLevel level )
+        {
+            this.typeName = typeName;
+            this.level = level;
+        }
+    }
+
+    private class ConsoleLogLevels : ScriptableObject
+    {
+        public List<LogEntry> LogEntries;
+    }
+
+    private static void InitLogging()
+    {
+        logLevelsAsset = Resources.Load<ConsoleLogLevels>( CONSOLE_LOG_LEVELS_ASSET );
+        if( logLevelsAsset == null )
+        {
+            logLevelsAsset = ScriptableObject.CreateInstance<ConsoleLogLevels>();
+#if UNITY_EDITOR
+            AssetDatabase.CreateAsset( logLevelsAsset, "Assets/Resources/" + CONSOLE_LOG_LEVELS_ASSET + ".asset" );
+#endif
+        }
+
+        loggingLevels = new();
+        foreach( LogEntry entry in logLevelsAsset.LogEntries )
+        {
+            loggingLevels.Add( entry.typeName, entry.level );
+        }
+    }
+
+    public static void Log( string log, LogLevel level, string group = null )
+    {
+        if( !IsInitialised ) return;
+        string callingTypeName = ( new System.Diagnostics.StackTrace() ).GetFrame( 1 ).GetMethod().DeclaringType!.Name;
+
+        LogLevel setLevel = LogLevel.Debug;
+        if( loggingLevels.TryGetValue( callingTypeName, out var loggingLevel ) )
+        {
+            setLevel = loggingLevel;
+        }
+        else if( group != null && loggingLevels.TryGetValue( group, out var logLevel ) )
+        {
+            setLevel = logLevel;
+        }
+
+        if( setLevel < level )
+        {
+            return;
+        }
+
+        switch( level )
+        {
+            case LogLevel.Debug:
+            case LogLevel.Info:
+                Debug.Log( log );
+                break;
+            case LogLevel.Warning:
+                Debug.LogWarning( log );
+                break;
+            case LogLevel.Error:
+            case LogLevel.Critical:
+                Debug.LogError( log );
+                break;
+        }
+    }
+
+    [ConsoleFunc]
+    public static void SetLogLevel( string typeName, LogLevel level )
+    {
+        if( !IsInitialised ) return;
+        loggingLevels[typeName] = level;
+        UpdateLoggingPersistence();
+    }
+
+    [ConsoleFunc]
+    public static void ClearLogLevel( string name )
+    {
+        if( !IsInitialised ) return;
+        if( !loggingLevels.ContainsKey( name ) )
+        {
+            return;
+        }
+
+        loggingLevels.Remove( name );
+        UpdateLoggingPersistence();
+    }
+
+    [ConsoleFunc]
+    public static void ResetLogLevels()
+    {
+        if( !IsInitialised ) return;
+        loggingLevels.Clear();
+        UpdateLoggingPersistence();
+    }
+
+    private static void UpdateLoggingPersistence()
+    {
+#if UNITY_EDITOR
+        //Write to disk so it persists.
+        logLevelsAsset.LogEntries = loggingLevels.Select( kvp => new LogEntry( kvp.Key, kvp.Value ) ).ToList();
+        EditorUtility.SetDirty( logLevelsAsset );
+        AssetDatabase.SaveAssets();
+#endif
+    }
+}
+
+#endif // LOGGING_IN_USE
 
 #endregion
 
